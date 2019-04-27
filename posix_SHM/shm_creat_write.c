@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <semaphore.h>
 
 typedef struct ShmData_S_ {
     int data;
@@ -13,6 +14,7 @@ typedef struct ShmData_S_ {
 } ShmData_T;
 
 #define FILENAME "/my_shared_memmory"
+#define SEMNAME "/my_semaphore"
 
 int main(int argc, char **argv)
 {
@@ -21,6 +23,7 @@ int main(int argc, char **argv)
     size_t pagesize, filesize;
     struct stat buf;
     void *ptr;
+    sem_t *mutex;
     pid_t pid = getpid();
 
     pagesize = sysconf(_SC_PAGESIZE);
@@ -58,6 +61,16 @@ int main(int argc, char **argv)
     }
 
     shm_data = (ShmData_T *)ptr;
+    mutex = sem_open(SEMNAME, O_CREAT | O_EXCL, 0644, 1);
+    if (SEM_FAILED == mutex) {
+        perror("Failed in sem_open:");
+        exit(1);
+    }
+    if (sem_wait(mutex) == -1) {
+        perror("Failed in sem_wait:");
+        exit(1);
+    }
+
     shm_data->data = 23;
     shm_data->pointer = &shm_data->data;
     printf("pid is %ld\n", pid);
@@ -65,8 +78,17 @@ int main(int argc, char **argv)
     printf("shm_data->data is %d\n", shm_data->data);
     printf("shm_data->pointer is %p\n", shm_data->pointer);
 
+    if (sem_post(mutex) == -1) {
+        perror("Failed in sem_post:");
+        exit(1);
+    }
+    if (sem_close(mutex) == -1) {
+        perror("Failed in sem_close:");
+        exit(1);
+    }
     if(munmap(ptr, buf.st_size) == -1) {
         perror("Failed in munmap:");
     }
+
     return 0;
 }
